@@ -1,0 +1,27 @@
+# 环境与密钥
+.env
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 模型与数据
+data/
+*.pt
+*.joblib
+*.pth
+
+# IDE / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志与临时
+*.log
+.cache/

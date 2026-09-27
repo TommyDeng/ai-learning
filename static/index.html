@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Agent 助手</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 24px auto; padding: 0 12px; background:#f6f7fb; }
+    h1 { margin-bottom: 6px; }
+    .sub { color:#666; margin-bottom: 16px; }
+    #log { background:#fff; border-radius:12px; padding:12px; min-height:320px; box-shadow:0 2px 10px rgba(0,0,0,.06); overflow-y:auto; }
+    .row { margin:10px 0; padding:10px 12px; border-radius:10px; line-height:1.5; white-space:pre-wrap; }
+    .user { background:#e8f1ff; }
+    .bot { background:#f3f4f6; }
+    .meta { font-size:12px; color:#666; margin-bottom:4px; }
+    .bar { display:flex; gap:8px; margin-top:12px; }
+    textarea { flex:1; height:70px; border:1px solid #ddd; border-radius:8px; padding:8px; }
+    button { border:none; border-radius:8px; background:#3b82f6; color:#fff; padding:0 14px; cursor:pointer; }
+    button.secondary { background:#64748b; }
+  </style>
+</head>
+<body>
+  <h1>AI Agent 助手</h1>
+  <div class="box" style="margin-bottom:12px; background:#fff; border-radius:12px; padding:12px;">
+    <div style="margin-bottom:8px; font-weight:600;">知识库管理</div>
+
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="file" id="file" accept=".txt" />
+      <button onclick="uploadFile()">上传并重建</button>
+      <button class="secondary" onclick="refreshKnowledge()">刷新列表</button>
+    </div>
+
+    <div id="kbMsg" class="meta" style="margin-top:8px;"></div>
+    <ul id="kbList" style="margin:10px 0 0; padding-left:18px;"></ul>
+  </div>
+  
+  <p class="sub">支持多轮对话 · 知识库 · 计算器</p>
+
+  <div id="log"></div>
+
+  <div class="bar">
+    <textarea id="q" placeholder="先说：我叫Tommy。再说：我叫什么名字？"></textarea>
+    <button onclick="ask()">发送</button>
+    <button class="secondary" onclick="clearChat()">清空</button>
+  </div>
+
+  <script>
+    const sessionId = "web-" + (localStorage.getItem("sid") || Math.random().toString(36).slice(2));
+    localStorage.setItem("sid", sessionId.replace("web-", ""));
+
+    function addRow(role, text, meta="") {
+      const log = document.getElementById("log");
+      const div = document.createElement("div");
+      div.className = "row " + (role === "user" ? "user" : "bot");
+      div.innerHTML = (meta ? `<div class="meta">${meta}</div>` : "") + text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    async function ask() {
+      const input = document.getElementById("q");
+      const question = input.value.trim();
+      if (!question) return;
+      input.value = "";
+      addRow("user", question);
+
+      try {
+        const res = await fetch("/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, session_id: sessionId }),
+        });
+        const text = await res.text();
+        const data = JSON.parse(text);
+        const meta = `tool: ${data.tool ?? "none"}`;
+        addRow("bot", data.answer || "(空回复)", meta);
+      } catch (e) {
+        addRow("bot", "请求失败: " + e);
+      }
+    }
+
+    async function clearChat() {
+      await fetch("/agent/clear?session_id=" + encodeURIComponent(sessionId), { method: "POST" });
+      document.getElementById("log").innerHTML = "";
+    }
+
+async function refreshKnowledge() {
+  const kbMsg = document.getElementById("kbMsg");
+  const kbList = document.getElementById("kbList");
+  try {
+    const res = await fetch("/knowledge/list");
+    const data = await res.json();
+    kbMsg.textContent = `片段数: ${data.chunk_count}`;
+    kbList.innerHTML = "";
+
+    (data.files || []).forEach((name) => {
+      const li = document.createElement("li");
+      li.style.margin = "6px 0";
+      li.innerHTML = `
+        <code>${name}</code>
+        <button class="secondary" style="margin-left:8px; padding:4px 8px;"
+          onclick="deleteKnowledge('${name}')">删除</button>
+      `;
+      kbList.appendChild(li);
+    });
+
+    if (!data.files || data.files.length === 0) {
+      kbList.innerHTML = "<li>（暂无文件）</li>";
+    }
+  } catch (e) {
+    kbMsg.textContent = "获取列表失败: " + e;
+  }
+}
+
+async function uploadFile() {
+  const fileInput = document.getElementById("file");
+  const kbMsg = document.getElementById("kbMsg");
+  if (!fileInput.files.length) {
+    kbMsg.textContent = "请先选择 .txt 文件";
+    return;
+  }
+
+  const form = new FormData();
+  form.append("file", fileInput.files[0]);
+  kbMsg.textContent = "上传中...";
+
+  try {
+    const res = await fetch("/knowledge/upload", { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) {
+      kbMsg.textContent = data.detail || "上传失败";
+      return;
+    }
+    kbMsg.textContent = `${data.message}（片段数: ${data.chunk_count}）`;
+    fileInput.value = "";
+    await refreshKnowledge();
+  } catch (e) {
+    kbMsg.textContent = "上传失败: " + e;
+  }
+}
+
+async function deleteKnowledge(filename) {
+  if (!confirm(`确认删除 ${filename}？`)) return;
+  const kbMsg = document.getElementById("kbMsg");
+  try {
+    const res = await fetch("/knowledge/" + encodeURIComponent(filename), {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      kbMsg.textContent = data.detail || "删除失败";
+      return;
+    }
+    kbMsg.textContent = `${data.message}（片段数: ${data.chunk_count}）`;
+    await refreshKnowledge();
+  } catch (e) {
+    kbMsg.textContent = "删除失败: " + e;
+  }
+}
+
+// 页面加载时自动刷新列表
+refreshKnowledge();
+  </script>
+</body>
+</html>
