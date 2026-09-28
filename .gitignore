@@ -25,3 +25,10 @@ Thumbs.db
 # 日志与临时
 *.log
 .cache/
+
+ocr_uploads/
+yolo_uploads/
+yolo_out/
+runs/
+data/
+*.pt
