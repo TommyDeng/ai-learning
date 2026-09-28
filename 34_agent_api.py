@@ -29,10 +29,28 @@ def ui():
     return FileResponse("static/index.html")
 
 
-client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1",
-)
+def create_llm_client() -> tuple[OpenAI, str]:
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
+
+    if provider == "ollama":
+        client = OpenAI(
+            api_key="ollama",
+            base_url="http://127.0.0.1:11434/v1",
+        )
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+        return client, model
+
+    # 默认 groq
+    client = OpenAI(
+        api_key=os.getenv("GROQ_API_KEY"),
+        base_url="https://api.groq.com/openai/v1",
+    )
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+    return client, model
+
+
+client, MODEL_NAME = create_llm_client()
+print(f"当前 LLM: provider={os.getenv('LLM_PROVIDER', 'groq')}, model={MODEL_NAME}")
 
 
 KNOWLEDGE_DIR = Path("knowledge")
@@ -156,7 +174,7 @@ def run_agent(user_question: str, session_id: str = "default") -> dict:
     messages.append({"role": "user", "content": user_question})
 
     first = client.chat.completions.create(
-        model="openai/gpt-oss-20b",
+        model=MODEL_NAME,
         messages=messages,
         tools=tools_spec,
         tool_choice="auto",
@@ -196,7 +214,7 @@ def run_agent(user_question: str, session_id: str = "default") -> dict:
         )
 
         second = client.chat.completions.create(
-            model="openai/gpt-oss-20b",
+            model=MODEL_NAME,
             messages=messages,
             temperature=0.2,
             max_tokens=400,
