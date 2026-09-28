@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+openai
+python-dotenv
+numpy
+pandas
+scikit-learn
+sentence-transformers
+torch
+torchvision
+ultralytics
+opencv-python
+paddlepaddle
+paddleocr

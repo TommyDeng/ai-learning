@@ -335,5 +335,3 @@ Built a local AI Agent knowledge assistant with multi-turn chat, tool calling, e
 
 本仓库用于个人学习与作品展示。  
 第三方模型与依赖遵循其各自开源许可证。
-
-text
